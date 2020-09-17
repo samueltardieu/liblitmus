@@ -24,6 +24,7 @@ const char *usage_msg =
 	"    -o OFFSET         offset (also known as phase), zero by default (in ms)\n"
 	"    -q PRIORITY       priority to use (EDF by default, highest priority = 1)\n"
 	"    -m MAJOR-CYCLE    major cycle length (in ms, for table-driven reservations) \n"
+	"    -M                multi-criticality mode, allow reservation to go past major cycle\n"
 	"\n";
 
 void usage(char *error) {
@@ -69,7 +70,7 @@ static void attach_task(int attach_pid, struct reservation_config *config)
 }
 
 static struct lt_interval* parse_td_intervals(int argc, char** argv,
-	unsigned int *num_intervals, lt_t major_cycle)
+	unsigned int *num_intervals, lt_t major_cycle, int mc_mode)
 {
 	int i, matched;
 	struct lt_interval *slots = malloc(sizeof(slots[0]) * argc);
@@ -109,7 +110,7 @@ static struct lt_interval* parse_td_intervals(int argc, char** argv,
 			exit(5);
 		}
 
-		if (slots[i].end >= major_cycle) {
+		if (!mc_mode && slots[i].end >= major_cycle) {
 			fprintf(stderr, "interval %s: exceeds major cycle length (%llu >= %llu)\n", argv[i],
 			slots[i].end, major_cycle);
 			exit(5);
@@ -121,7 +122,7 @@ static struct lt_interval* parse_td_intervals(int argc, char** argv,
 	return slots;
 }
 
-#define OPTSTR "n:a:r:t:c:b:p:d:o:q:m:h"
+#define OPTSTR "n:a:r:t:c:b:p:d:o:q:m:hM"
 
 int main(int argc, char** argv)
 {
@@ -131,6 +132,7 @@ int main(int argc, char** argv)
 	int create_new = 0;
 	int attach_pid = 0;
 	int res_type = SPORADIC_POLLING;
+	int mc_mode = 0;
 
 	struct reservation_config config;
 
@@ -166,7 +168,9 @@ int main(int argc, char** argv)
 		case 'm':
 			major_cycle_ms = atof(optarg);
 			break;
-
+		case 'M':
+			mc_mode = 1;
+			break;
 		case 'q':
 			errno = 0;
 			config.priority = strtoull(optarg, &parsed, 0);
@@ -235,7 +239,7 @@ int main(int argc, char** argv)
 		argv += optind;
 		config.table_driven_params.intervals = parse_td_intervals(
 			argc, argv, &config.table_driven_params.num_intervals,
-			config.table_driven_params.major_cycle_length);
+			config.table_driven_params.major_cycle_length, mc_mode);
 		if (!config.table_driven_params.num_intervals)
 			usage("Table-driven reservations require at least one interval to be specified.");
 	}
